@@ -152,6 +152,7 @@ const RRT_SCENARIOS = [
 const AGENT_COLORS = ["#00f0ff","#ff3366","#33ff99","#ffaa00","#aa66ff","#ff6644"];
 const SPEED_LABELS = ["0.25x","0.5x","1x","2x","4x"];
 const SPEED_VALUES = [0.25, 0.5, 1, 2, 4];
+const PF_TRAIL_MAX_POINTS = 9000;
 
 const PF_DEFAULT_PARAMS = {
   kAtt: 2.5, kRep: 0.0042, kRepPotential: 0.0032, repRange: 0.13,
@@ -347,7 +348,7 @@ function PFCanvas({ scenario, size, running, speed, onStats, params }) {
             agent.y = Math.max(0, Math.min(1, agent.y + agent.vy * params.stepScale));
             agent.steps++;
             agent.trail.push({ x: agent.x, y: agent.y });
-            if (agent.trail.length > 3000) agent.trail.shift();
+            if (agent.trail.length > PF_TRAIL_MAX_POINTS) agent.trail.shift();
             if (curDist < 0.025) { agent.reached = true; agent.finishedTrail = [...agent.trail]; }
           }
         }
