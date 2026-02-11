@@ -137,9 +137,9 @@ const RRT_SCENARIOS = [
   {
     name: "ENCLOSURE", desc: "Escape and reach goal",
     obstacles: [
-      { x: 0.22, y: 0.22, r: 0.07 }, { x: 0.22, y: 0.36, r: 0.07 },
-      { x: 0.36, y: 0.22, r: 0.07 }, { x: 0.36, y: 0.36, r: 0.07 },
-      { x: 0.29, y: 0.15, r: 0.05 }, { x: 0.15, y: 0.29, r: 0.05 },
+      { x: 0.2, y: 0.2, r: 0.07 }, { x: 0.2, y: 0.38, r: 0.07 },
+      { x: 0.38, y: 0.2, r: 0.07 }, { x: 0.38, y: 0.38, r: 0.07 },
+      { x: 0.29, y: 0.13, r: 0.05 }, { x: 0.13, y: 0.29, r: 0.05 },
     ],
     start: { x: 0.29, y: 0.29 }, goal: { x: 0.9, y: 0.9 },
   },
@@ -565,7 +565,7 @@ function RRTCanvas({ scenario, size, running, speed, onStats }) {
       if (!st) { animRef.current = requestAnimationFrame(draw); return; }
 
       if (running && !st.done && st.nodes.length < maxNodes) {
-        st.frameAcc += speed * 2.5;
+        st.frameAcc += speed * 0.625;
         const steps = Math.max(1, Math.floor(st.frameAcc));
         st.frameAcc -= steps;
 
