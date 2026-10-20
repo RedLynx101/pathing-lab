@@ -49,6 +49,8 @@ npm run dev
 
 Open [http://localhost:5173](http://localhost:5173) in your browser.
 
+`npm test` runs the unit tests for the speed timing with Node's built-in test runner (no extra dependencies).
+
 ## Controls
 
 | Control | Description |
@@ -56,7 +58,7 @@ Open [http://localhost:5173](http://localhost:5173) in your browser.
 | **Tab bar** | Switch between Potential Fields, Wavefront/BFS, and RRT |
 | **Pause / Run** | Freeze or resume all simulations |
 | **Reset** | Restart all scenarios from initial state |
-| **Speed** | 0.25x, 0.5x, 1x, 2x, 4x playback speed |
+| **Speed** | 0.25x, 0.5x, 1x, 2x, 4x simulation speed on every tab. Steps are timed by the clock (60 logical ticks per second), not by the display's refresh rate, so a 120 Hz screen runs at the same speed as a 60 Hz one |
 | **Info** | Toggle algorithm description panel |
 | **Tuning** | (Potential Fields only) Expand the bottom panel to adjust all algorithm parameters live |
 
@@ -70,9 +72,11 @@ pathing-lab/
   package.json     # Dependencies (React 18, Vite 5)
   src/
     main.jsx       # React entry point
+    stepClock.js   # Clock-based step timing behind the speed control
+    stepClock.test.js  # Unit tests for the step timing (npm test)
   docs/media/      # README GIFs and screenshots
   .github/workflows/
-    deploy-pages.yml  # Builds and deploys to GitHub Pages on every push to main
+    deploy-pages.yml  # Tests, builds and deploys to GitHub Pages on every push to main
   LICENSE          # MIT
   .gitignore
   README.md
@@ -80,7 +84,7 @@ pathing-lab/
 
 ## Deployment
 
-The live demo is the production Vite build (`npm run build` writes `dist/`), deployed to GitHub Pages by [`.github/workflows/deploy-pages.yml`](.github/workflows/deploy-pages.yml) on every push to `main`. To try the production build locally, run `npm run build` and then `npm run preview`.
+The live demo is the production Vite build (`npm run build` writes `dist/`), deployed to GitHub Pages by [`.github/workflows/deploy-pages.yml`](.github/workflows/deploy-pages.yml) on every push to `main` once `npm test` passes. To try the production build locally, run `npm run build` and then `npm run preview`.
 
 ## Tunable Parameters (Potential Fields)
 

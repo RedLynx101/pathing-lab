@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { ACC_START, frameTicks, takeSteps } from "./src/stepClock.js";
 
 // ══════════════════════════════════════════════════════════════
 //  SCENARIO DATA
@@ -154,6 +155,11 @@ const SPEED_LABELS = ["0.25x","0.5x","1x","2x","4x"];
 const SPEED_VALUES = [0.25, 0.5, 1, 2, 4];
 const PF_TRAIL_MAX_POINTS = 9000;
 
+// Simulation steps per logical tick (60 ticks per second, see src/stepClock.js) at 1x speed.
+const PF_STEPS_PER_TICK = 1;     // one integration step per agent
+const WAVE_STEPS_PER_TICK = 0.4; // one BFS layer
+const RRT_STEPS_PER_TICK = 1;    // one sample/extend iteration
+
 const PF_DEFAULT_PARAMS = {
   kAtt: 2.5, kRep: 0.0042, kRepPotential: 0.0032, repRange: 0.13,
   backwardScaleMin: 0.05, backwardScaleNearPower: 3.0,
@@ -248,7 +254,7 @@ function PFCanvas({ scenario, size, running, speed, onStats, params }) {
         reached: false, vx: 0, vy: 0, steps: 0, finishedTrail: null,
         stuckCount: 0, prevDist: Infinity,
       })),
-      time: 0,
+      time: 0, stepAcc: ACC_START, stepCount: 0,
     };
     fieldRef.current = null;
   }, [scenario]);
@@ -303,7 +309,10 @@ function PFCanvas({ scenario, size, running, speed, onStats, params }) {
       return fc;
     };
 
-    const draw = () => {
+    let prevTs = null;
+    const draw = (ts) => {
+      const ticks = frameTicks(prevTs, ts);
+      prevTs = ts;
       if (!fieldRef.current) fieldRef.current = buildField();
       ctx.drawImage(fieldRef.current, 0, 0);
       for (const obs of scenario.obstacles) {
@@ -324,9 +333,11 @@ function PFCanvas({ scenario, size, running, speed, onStats, params }) {
       if (!state) { animRef.current = requestAnimationFrame(draw); return; }
 
       if (running) {
-        const substeps = Math.max(1, Math.round(speed));
-        for (let s=0; s<substeps; s++) {
+        const { steps, acc } = takeSteps(state.stepAcc, speed * PF_STEPS_PER_TICK, ticks);
+        state.stepAcc = acc;
+        for (let s=0; s<steps; s++) {
           state.time += 0.012;
+          state.stepCount++;
           for (const agent of state.agents) {
             if (agent.reached) continue;
             const curDist = Math.hypot(agent.x-scenario.goal.x, agent.y-scenario.goal.y);
@@ -419,7 +430,7 @@ function WaveCanvas({ scenario, size, running, speed, onStats }) {
       queue: [{ r: scenario.goal.r, c: scenario.goal.c }],
       done: false, path: null, maxDist: 0,
       frontier: [{ r: scenario.goal.r, c: scenario.goal.c }],
-      cellsVisited: 1, frameAcc: 0,
+      cellsVisited: 1, stepAcc: ACC_START, stepCount: 0,
     };
   }, [scenario, rows, cols]);
 
@@ -433,13 +444,15 @@ function WaveCanvas({ scenario, size, running, speed, onStats }) {
     const ctx = canvas.getContext("2d");
     const cellW = w/cols, cellH = h/rows;
 
-    const draw = () => {
+    let prevTs = null;
+    const draw = (ts) => {
+      const ticks = frameTicks(prevTs, ts);
+      prevTs = ts;
       const st = stateRef.current;
       if (!st) { animRef.current = requestAnimationFrame(draw); return; }
       if (running && !st.done) {
-        st.frameAcc += speed * 0.4;
-        const steps = Math.floor(st.frameAcc);
-        st.frameAcc -= steps;
+        const { steps, acc } = takeSteps(st.stepAcc, speed * WAVE_STEPS_PER_TICK, ticks);
+        st.stepAcc = acc;
         for (let s=0; s<steps; s++) {
           if (st.queue.length === 0) {
             st.done = true;
@@ -454,6 +467,7 @@ function WaveCanvas({ scenario, size, running, speed, onStats }) {
             }
             break;
           }
+          st.stepCount++;
           const next = [];
           for (const {r,c} of st.queue) {
             for (const [dr,dc] of [[0,1],[0,-1],[1,0],[-1,0]]) {
@@ -548,7 +562,8 @@ function RRTCanvas({ scenario, size, running, speed, onStats }) {
       nodes: [{ x: scenario.start.x, y: scenario.start.y, parent: -1 }],
       done: false,
       path: null,
-      frameAcc: 0,
+      stepAcc: ACC_START,
+      stepCount: 0,
     };
   }, [scenario]);
 
@@ -561,17 +576,20 @@ function RRTCanvas({ scenario, size, running, speed, onStats }) {
     canvas.width = w; canvas.height = h;
     const ctx = canvas.getContext("2d");
 
-    const draw = () => {
+    let prevTs = null;
+    const draw = (ts) => {
+      const ticks = frameTicks(prevTs, ts);
+      prevTs = ts;
       const st = stateRef.current;
       if (!st) { animRef.current = requestAnimationFrame(draw); return; }
 
       if (running && !st.done && st.nodes.length < maxNodes) {
-        st.frameAcc += speed * 0.625;
-        const steps = Math.max(1, Math.floor(st.frameAcc));
-        st.frameAcc -= steps;
+        const { steps, acc } = takeSteps(st.stepAcc, speed * RRT_STEPS_PER_TICK, ticks);
+        st.stepAcc = acc;
 
         for (let s = 0; s < steps; s++) {
           if (st.done || st.nodes.length >= maxNodes) break;
+          st.stepCount++;
 
           // Sample random point (with goal bias)
           let sx, sy;
@@ -710,9 +728,11 @@ export default function App() {
   const speed = SPEED_VALUES[speedIdx];
   const size = 220;
 
-  const handlePfStats = useCallback((idx) => (s) => setPfStats(p => ({...p,[idx]:s})), []);
-  const handleWfStats = useCallback((idx) => (s) => setWfStats(p => ({...p,[idx]:s})), []);
-  const handleRrtStats = useCallback((idx) => (s) => setRrtStats(p => ({...p,[idx]:s})), []);
+  // One stable callback per scenario. A fresh function each render would change the canvases'
+  // effect dependencies and restart every animation loop on every frame.
+  const pfStatsHandlers = useMemo(() => SCENARIOS.map((_, idx) => (s) => setPfStats(p => ({...p,[idx]:s}))), []);
+  const wfStatsHandlers = useMemo(() => WAVE_SCENARIOS.map((_, idx) => (s) => setWfStats(p => ({...p,[idx]:s}))), []);
+  const rrtStatsHandlers = useMemo(() => RRT_SCENARIOS.map((_, idx) => (s) => setRrtStats(p => ({...p,[idx]:s}))), []);
 
   const doReset = () => {
     setRunning(false); setPfStats({}); setWfStats({}); setRrtStats({});
@@ -923,7 +943,7 @@ export default function App() {
                   </>}
                 </div>
               </div>
-              <PFCanvas scenario={sc} size={size} running={running} speed={speed} onStats={handlePfStats(idx)} params={pfParams} />
+              <PFCanvas scenario={sc} size={size} running={running} speed={speed} onStats={pfStatsHandlers[idx]} params={pfParams} />
               <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
                 {sc.agents.map((_, ai) => (
                   <div key={ai} style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 8 }}>
@@ -959,7 +979,7 @@ export default function App() {
                   </>)}
                 </div>
               </div>
-              <WaveCanvas scenario={sc} size={size} running={running} speed={speed} onStats={handleWfStats(idx)} />
+              <WaveCanvas scenario={sc} size={size} running={running} speed={speed} onStats={wfStatsHandlers[idx]} />
             </div>
           ))}
 
@@ -982,7 +1002,7 @@ export default function App() {
                   </>)}
                 </div>
               </div>
-              <RRTCanvas scenario={sc} size={size} running={running} speed={speed} onStats={handleRrtStats(idx)} />
+              <RRTCanvas scenario={sc} size={size} running={running} speed={speed} onStats={rrtStatsHandlers[idx]} />
             </div>
           ))}
         </div>
